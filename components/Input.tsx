@@ -44,7 +44,7 @@ export default function Input({
     return (
         <View className="mb-4">
             {label && (
-                <Text className="text-sm font-medium text-gray-700 mb-2">{label}</Text>
+                <Text className="text-sm font-medium text-white mb-2">{label}</Text>
             )}
 
             <View className={containerStyles}>
