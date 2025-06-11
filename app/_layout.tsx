@@ -14,14 +14,7 @@ export default function RootLayout() {
             >
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen name="auth" options={{ headerShown: false }} />
-                <Stack.Screen
-                    name="properties"
-                    options={{
-                        headerShown: true,
-                        headerTitle: "Property Details",
-                        headerBackTitle: "Back"
-                    }}
-                />
+
             </Stack>
         </AuthProvider>
     );
