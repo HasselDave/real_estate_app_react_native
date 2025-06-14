@@ -63,21 +63,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const signUp = async (email: string, password: string, displayName: string) => {
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
+            const newUser = userCredential.user;
 
             // Update the user's display name
-            await updateProfile(user, { displayName });
+            await updateProfile(newUser, { displayName });
 
             // Create user profile in Firestore
             const userProfile: UserProfile = {
-                uid: user.uid,
-                email: user.email!,
+                uid: newUser.uid,
+                email: newUser.email!,
                 displayName,
-                photoURL: user.photoURL || undefined,
+                photoURL: newUser.photoURL || undefined,
                 createdAt: new Date(),
             };
 
-            await setDoc(doc(db, 'users', user.uid), userProfile);
+            await setDoc(doc(db, 'users', newUser.uid), userProfile);
+
+            // Update local state immediately
+            setUser(newUser);
             setUserProfile(userProfile);
         } catch (error) {
             console.error('Error signing up:', error);
@@ -131,6 +134,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            console.log('Auth state changed:', user?.uid); // Debug log
             setUser(user);
             if (user) {
                 await fetchUserProfile(user.uid);

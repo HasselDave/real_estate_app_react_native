@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, SafeAreaView, TouchableOpacity, Alert, ImageBackground } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +8,7 @@ import Input from '../../components/Input';
 
 export default function RegisterScreen() {
     const router = useRouter();
-    const { signUp } = useAuth();
+    const { signUp, user } = useAuth();
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -19,6 +19,16 @@ export default function RegisterScreen() {
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<{[key: string]: string}>({});
     const [acceptedTerms, setAcceptedTerms] = useState(false);
+    const [registrationInProgress, setRegistrationInProgress] = useState(false);
+
+    // Handle navigation when user becomes authenticated
+    useEffect(() => {
+        if (user && registrationInProgress) {
+            console.log('User authenticated, navigating to home...');
+            router.replace('/(tabs)');
+            setRegistrationInProgress(false);
+        }
+    }, [user, registrationInProgress, router]);
 
     // Same property images as welcome screen
     const propertyImages = [
@@ -77,18 +87,21 @@ export default function RegisterScreen() {
         if (!validateForm()) return;
 
         setLoading(true);
+        setRegistrationInProgress(true);
+
         try {
             await signUp(
                 formData.email.trim(),
                 formData.password,
                 formData.fullName.trim()
             );
-            router.replace('/(tabs)');
+            // Navigation will be handled by useEffect when user state changes
         } catch (error: any) {
             Alert.alert(
                 'Registration Failed',
                 error.message || 'An error occurred during registration'
             );
+            setRegistrationInProgress(false);
         } finally {
             setLoading(false);
         }
