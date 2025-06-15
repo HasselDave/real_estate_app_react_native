@@ -217,9 +217,7 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({ navigation }) => {
                         <Text className="text-white text-xs font-medium capitalize">{item.type}</Text>
                     </View>
                 </View>
-                <TouchableOpacity className="absolute top-2 right-2 bg-black/30 rounded-full p-1">
-                    <Text className="text-white text-sm">♡</Text>
-                </TouchableOpacity>
+
             </View>
 
             <View className="p-3">

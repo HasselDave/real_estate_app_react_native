@@ -92,9 +92,6 @@ const HomeScreen: React.FC = () => {
                         <Text className="text-white text-xs font-medium capitalize">{item.type}</Text>
                     </View>
                 </View>
-                <TouchableOpacity className="absolute top-3 right-3 bg-black/30 rounded-full p-2">
-                    <Text className="text-white">♡</Text>
-                </TouchableOpacity>
 
                 {/* Gradient overlay at bottom */}
                 <View className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/60 to-transparent" />

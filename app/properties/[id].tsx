@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
+import { useAuth } from '../context/AuthContext';
 import PropertyAPI from '../../services/api';
 
 const { width, height } = Dimensions.get('window');
@@ -48,16 +49,21 @@ interface Property {
 
 const PropertyDetailsScreen: React.FC = () => {
     const { id } = useLocalSearchParams<{ id: string }>();
+    const { user, userProfile } = useAuth();
     const [property, setProperty] = useState<Property | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [isFavorite, setIsFavorite] = useState<boolean>(false);
     const [currentImageIndex, setCurrentImageIndex] = useState<number>(0);
+    const [favoriteLoading, setFavoriteLoading] = useState<boolean>(false);
 
     useEffect(() => {
         if (id) {
             loadProperty();
+            if (user) {
+                checkIfFavorite();
+            }
         }
-    }, [id]);
+    }, [id, user]);
 
     const loadProperty = async (): Promise<void> => {
         try {
@@ -76,6 +82,20 @@ const PropertyDetailsScreen: React.FC = () => {
             router.back();
         } finally {
             setLoading(false);
+        }
+    };
+
+    const checkIfFavorite = async (): Promise<void> => {
+        if (!user) return;
+
+        try {
+            const response = await PropertyAPI.getFavorites(user.uid);
+            if (response.success) {
+                const isFav = response.data.some((favProperty: Property) => favProperty.id === id);
+                setIsFavorite(isFav);
+            }
+        } catch (error) {
+            console.error('Error checking favorite status:', error);
         }
     };
 
@@ -109,17 +129,32 @@ const PropertyDetailsScreen: React.FC = () => {
     };
 
     const toggleFavorite = async (): Promise<void> => {
-        // In a real app, you would have user authentication
-        // For now, we'll use a mock user ID
-        const mockUserId = 'user123';
+        if (!user) {
+            Alert.alert('Login Required', 'Please log in to save favorites', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Login', onPress: () => router.push('/auth/login') }
+            ]);
+            return;
+        }
 
+        setFavoriteLoading(true);
         try {
-            const response = await PropertyAPI.toggleFavorite(mockUserId, id as string);
+            const response = await PropertyAPI.toggleFavorite(user.uid, id as string);
             if (response.success) {
                 setIsFavorite(response.isFavorite);
+
+                // Show feedback to user
+                const message = response.isFavorite
+                    ? 'Added to favorites!'
+                    : 'Removed from favorites!';
+
+                Alert.alert('Success', message);
             }
         } catch (error) {
             console.error('Toggle favorite error:', error);
+            Alert.alert('Error', 'Failed to update favorites. Please try again.');
+        } finally {
+            setFavoriteLoading(false);
         }
     };
 
@@ -182,10 +217,17 @@ const PropertyDetailsScreen: React.FC = () => {
 
                             <TouchableOpacity
                                 onPress={toggleFavorite}
-                                className="bg-black/30 rounded-full p-3"
+                                className={`rounded-full p-3 ${
+                                    favoriteLoading
+                                        ? 'bg-black/30'
+                                        : isFavorite
+                                            ? 'bg-red-500/80'
+                                            : 'bg-black/30'
+                                }`}
+                                disabled={favoriteLoading}
                             >
                                 <Text className="text-white text-lg">
-                                    {isFavorite ? '❤️' : '♡'}
+                                    {favoriteLoading ? '⏳' : isFavorite ? '❤️' : '♡'}
                                 </Text>
                             </TouchableOpacity>
                         </View>

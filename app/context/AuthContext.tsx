@@ -98,13 +98,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
     };
 
-    // Logout function
+    // Improved logout function with better error handling and state cleanup
     const logout = async () => {
         try {
-            await signOut(auth);
+            console.log('Starting logout process...');
+
+            // Clear local state first
+            setUser(null);
             setUserProfile(null);
+
+            // Then sign out from Firebase
+            await signOut(auth);
+
+            console.log('Logout successful');
         } catch (error) {
-            console.error('Error logging out:', error);
+            console.error('Error during logout:', error);
+
+            // Even if signOut fails, clear local state
+            setUser(null);
+            setUserProfile(null);
+
+            // Re-throw the error so the UI can handle it
             throw error;
         }
     };
@@ -134,13 +148,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            console.log('Auth state changed:', user?.uid); // Debug log
+            console.log('Auth state changed:', user?.uid || 'null'); // Better debug log
+
             setUser(user);
+
             if (user) {
                 await fetchUserProfile(user.uid);
             } else {
                 setUserProfile(null);
             }
+
             setLoading(false);
         });
 
