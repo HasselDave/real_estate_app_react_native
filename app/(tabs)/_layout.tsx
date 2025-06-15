@@ -8,10 +8,10 @@ export default function TabLayout() {
             <StatusBar style="dark" />
             <Tabs
                 screenOptions={{
-                    tabBarActiveTintColor: '#0ea5e9', // primary-500
-                    tabBarInactiveTintColor: '#9ca3af', // gray-400
+                    tabBarActiveTintColor: '#f9fafb', // primary-500
+                    tabBarInactiveTintColor: '#0c4a6e', // gray-400
                     tabBarStyle: {
-                        backgroundColor: '#ffffff',
+                        backgroundColor: '#0ea5e9',
                         borderTopWidth: 0, // Remove top border
                         paddingBottom: 8,
                         paddingTop: 8,
