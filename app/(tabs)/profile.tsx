@@ -58,12 +58,30 @@ const ProfileScreen: React.FC = () => {
     const [updating, setUpdating] = useState<boolean>(false);
     const [loggingOut, setLoggingOut] = useState<boolean>(false);
 
+    // Check if user is signed out and redirect
+    useEffect(() => {
+        if (!user && !loading) {
+            console.log('User not authenticated, redirecting to welcome');
+            // Use replace to clear the navigation stack
+            router.replace('/auth/welcome');
+        }
+    }, [user, loading]);
+
     useEffect(() => {
         if (user) {
             loadFavorites();
             setNewDisplayName(userProfile?.displayName || user.displayName || '');
         }
     }, [user, userProfile]);
+
+    // Debug auth state changes
+    useEffect(() => {
+        console.log('Auth state debug:', {
+            user: !!user,
+            loading,
+            userEmail: user?.email
+        });
+    }, [user, loading]);
 
     const loadFavorites = async (): Promise<void> => {
         if (!user) return;
@@ -88,40 +106,31 @@ const ProfileScreen: React.FC = () => {
         setRefreshing(false);
     };
 
-    const handleLogout = (): void => {
-        Alert.alert(
-            'Confirm Logout',
-            'Are you sure you want to logout?',
-            [
-                {
-                    text: 'Cancel',
-                    style: 'cancel',
-                },
-                {
-                    text: 'Logout',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            setLoggingOut(true);
-                            console.log('Logout button pressed, calling logout...');
+    const handleLogout = async (): Promise<void> => {
+        console.log('Starting logout process...');
 
-                            await logout();
+        try {
+            setLoggingOut(true);
+            console.log('Calling logout function...');
 
-                            console.log('Logout completed, navigating to welcome...');
+            await logout();
+            console.log('Logout completed successfully');
 
-                            // Use router.push instead of router.replace for better navigation
-                            router.push('/auth/welcome');
+            // Force immediate navigation with stack reset
+            router.dismissAll();
+            router.replace('/auth/welcome');
 
-                        } catch (error) {
-                            console.error('Logout error:', error);
-                            Alert.alert('Error', 'Failed to logout. Please try again.');
-                        } finally {
-                            setLoggingOut(false);
-                        }
-                    },
-                },
-            ]
-        );
+        } catch (error) {
+            console.error('Logout error:', error);
+            // You can still use Alert for error messages - they usually work
+            Alert.alert(
+                'Logout Error',
+                'There was an issue logging out. Please try again.',
+                [{ text: 'OK' }]
+            );
+        } finally {
+            setLoggingOut(false);
+        }
     };
 
     const handleUpdateProfile = async (): Promise<void> => {
@@ -263,8 +272,9 @@ const ProfileScreen: React.FC = () => {
                     className={`rounded-xl py-3 items-center ${
                         loggingOut ? 'bg-gray-600' : 'bg-red-500'
                     }`}
-                    onPress={handleLogout}
+                    onPress={handleLogout}  // No need for arrow function anymore
                     disabled={loggingOut}
+                    style={{ opacity: loggingOut ? 0.6 : 1 }}
                 >
                     <Text className="text-white font-semibold text-base">
                         {loggingOut ? '🔄 Logging out...' : '🚪 Logout'}
@@ -378,6 +388,18 @@ const ProfileScreen: React.FC = () => {
         </Modal>
     );
 
+    // Show loading state while auth is initializing
+    if (loading) {
+        return (
+            <SafeAreaView className="flex-1 bg-gray-900">
+                <View className="flex-1 justify-center items-center">
+                    <Text className="text-white text-lg">Loading...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    // Show sign-in prompt if user is not authenticated
     if (!user) {
         return (
             <SafeAreaView className="flex-1 bg-gray-900">

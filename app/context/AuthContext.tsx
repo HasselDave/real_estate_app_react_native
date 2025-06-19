@@ -98,27 +98,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
     };
 
-    // Improved logout function with better error handling and state cleanup
+    // Improved logout function with immediate state clearing
     const logout = async () => {
+        console.log('AuthContext logout function called');
         try {
             console.log('Starting logout process...');
+            console.log('Current user before logout:', user?.email);
 
-            // Clear local state first
+            // Clear local state immediately for better UX
             setUser(null);
             setUserProfile(null);
+            console.log('Local state cleared');
 
             // Then sign out from Firebase
             await signOut(auth);
 
-            console.log('Logout successful');
+            console.log('Firebase signOut completed');
+
         } catch (error) {
             console.error('Error during logout:', error);
 
-            // Even if signOut fails, clear local state
+            // Ensure state is cleared even if signOut fails
             setUser(null);
             setUserProfile(null);
 
-            // Re-throw the error so the UI can handle it
             throw error;
         }
     };
@@ -147,14 +150,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            console.log('Auth state changed:', user?.uid || 'null'); // Better debug log
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            console.log('Auth state changed:', firebaseUser?.uid || 'null');
 
-            setUser(user);
-
-            if (user) {
-                await fetchUserProfile(user.uid);
+            if (firebaseUser) {
+                // User is signed in
+                setUser(firebaseUser);
+                await fetchUserProfile(firebaseUser.uid);
             } else {
+                // User is signed out - clear all state
+                console.log('User signed out, clearing state');
+                setUser(null);
                 setUserProfile(null);
             }
 
