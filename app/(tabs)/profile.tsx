@@ -1,5 +1,5 @@
 // app/(tabs)/profile.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -14,7 +14,7 @@ import {
     Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import PropertyAPI from '../../services/api';
 
@@ -49,7 +49,7 @@ interface Property {
 }
 
 const ProfileScreen: React.FC = () => {
-    const { user, userProfile, logout, updateUserProfile } = useAuth();
+    const { user, userProfile, logout, updateUserProfile, loading: authLoading } = useAuth();
     const [favorites, setFavorites] = useState<Property[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -57,53 +57,95 @@ const ProfileScreen: React.FC = () => {
     const [newDisplayName, setNewDisplayName] = useState<string>('');
     const [updating, setUpdating] = useState<boolean>(false);
     const [loggingOut, setLoggingOut] = useState<boolean>(false);
+    const [mounted, setMounted] = useState<boolean>(false);
 
-    // Check if user is signed out and redirect
+    // Mark component as mounted
     useEffect(() => {
-        if (!user && !loading) {
-            console.log('User not authenticated, redirecting to welcome');
-            // Use replace to clear the navigation stack
-            router.replace('/auth/welcome');
-        }
-    }, [user, loading]);
+        setMounted(true);
+        return () => setMounted(false);
+    }, []);
+
+    // Handle authentication redirect with better timing
+    useFocusEffect(
+        React.useCallback(() => {
+            // Only redirect if component is mounted, auth is not loading, and user is not authenticated
+            if (mounted && !authLoading && !user) {
+                console.log('User not authenticated, redirecting to welcome');
+                // Small delay to ensure navigation is ready
+                setTimeout(() => {
+                    router.replace('/auth/welcome');
+                }, 100);
+            }
+        }, [user, authLoading, mounted])
+    );
+
+    // Reload favorites when screen comes into focus
+    useFocusEffect(
+        React.useCallback(() => {
+            if (user && mounted && !authLoading) {
+                console.log('Profile screen focused, reloading favorites');
+                loadFavorites();
+            }
+        }, [user, mounted, authLoading])
+    );
 
     useEffect(() => {
-        if (user) {
+        if (user && mounted) {
             loadFavorites();
+        }
+    }, [user, mounted]);
+
+    // Only set display name once when user/userProfile is first loaded
+    useEffect(() => {
+        if (user && !newDisplayName) {
             setNewDisplayName(userProfile?.displayName || user.displayName || '');
         }
     }, [user, userProfile]);
+
+    // Handle modal opening - set display name when modal opens
+    const handleModalOpen = useCallback(() => {
+        setNewDisplayName(userProfile?.displayName || user?.displayName || '');
+        setShowEditModal(true);
+    }, [userProfile, user]);
 
     // Debug auth state changes
     useEffect(() => {
         console.log('Auth state debug:', {
             user: !!user,
-            loading,
+            authLoading,
+            mounted,
             userEmail: user?.email
         });
-    }, [user, loading]);
+    }, [user, authLoading, mounted]);
 
     const loadFavorites = async (): Promise<void> => {
-        if (!user) return;
+        if (!user || !mounted) return;
 
         try {
             setLoading(true);
             const response = await PropertyAPI.getFavorites(user.uid);
-            if (response.success) {
+            if (response.success && mounted) {
                 setFavorites(response.data);
             }
         } catch (error) {
             console.error('Error loading favorites:', error);
-            Alert.alert('Error', 'Failed to load favorites');
+            if (mounted) {
+                Alert.alert('Error', 'Failed to load favorites');
+            }
         } finally {
-            setLoading(false);
+            if (mounted) {
+                setLoading(false);
+            }
         }
     };
 
     const onRefresh = async (): Promise<void> => {
+        if (!mounted) return;
         setRefreshing(true);
         await loadFavorites();
-        setRefreshing(false);
+        if (mounted) {
+            setRefreshing(false);
+        }
     };
 
     const handleLogout = async (): Promise<void> => {
@@ -116,20 +158,22 @@ const ProfileScreen: React.FC = () => {
             await logout();
             console.log('Logout completed successfully');
 
-            // Force immediate navigation with stack reset
-            router.dismissAll();
-            router.replace('/auth/welcome');
+            // Navigation will be handled by the auth state change
+            // No need to manually navigate here
 
         } catch (error) {
             console.error('Logout error:', error);
-            // You can still use Alert for error messages - they usually work
-            Alert.alert(
-                'Logout Error',
-                'There was an issue logging out. Please try again.',
-                [{ text: 'OK' }]
-            );
+            if (mounted) {
+                Alert.alert(
+                    'Logout Error',
+                    'There was an issue logging out. Please try again.',
+                    [{ text: 'OK' }]
+                );
+            }
         } finally {
-            setLoggingOut(false);
+            if (mounted) {
+                setLoggingOut(false);
+            }
         }
     };
 
@@ -142,18 +186,24 @@ const ProfileScreen: React.FC = () => {
         try {
             setUpdating(true);
             await updateUserProfile(newDisplayName.trim());
-            setShowEditModal(false);
-            Alert.alert('Success', 'Profile updated successfully');
+            if (mounted) {
+                setShowEditModal(false);
+                Alert.alert('Success', 'Profile updated successfully');
+            }
         } catch (error) {
             console.error('Error updating profile:', error);
-            Alert.alert('Error', 'Failed to update profile');
+            if (mounted) {
+                Alert.alert('Error', 'Failed to update profile');
+            }
         } finally {
-            setUpdating(false);
+            if (mounted) {
+                setUpdating(false);
+            }
         }
     };
 
     const removeFavorite = async (propertyId: string): Promise<void> => {
-        if (!user) return;
+        if (!user || !mounted) return;
 
         Alert.alert(
             'Remove Favorite',
@@ -169,15 +219,32 @@ const ProfileScreen: React.FC = () => {
                     onPress: async () => {
                         try {
                             await PropertyAPI.toggleFavorite(user.uid, propertyId);
-                            setFavorites(prev => prev.filter(p => p.id !== propertyId));
+                            if (mounted) {
+                                setFavorites(prev => prev.filter(p => p.id !== propertyId));
+                            }
                         } catch (error) {
-                            Alert.alert('Error', 'Failed to remove favorite');
+                            if (mounted) {
+                                Alert.alert('Error', 'Failed to remove favorite');
+                            }
                         }
                     },
                 },
             ]
         );
     };
+
+    // Memoize the text input change handler to prevent unnecessary re-renders
+    const handleDisplayNameChange = useCallback((text: string) => {
+        setNewDisplayName(text);
+    }, []);
+
+    // Memoize the modal close handler
+    const handleModalClose = useCallback(() => {
+        setShowEditModal(false);
+    }, []);
+
+    // Memoize the modal open handler
+
 
     const renderFavoriteItem = ({ item }: { item: Property }) => (
         <TouchableOpacity
@@ -240,7 +307,7 @@ const ProfileScreen: React.FC = () => {
         </TouchableOpacity>
     );
 
-    const ProfileHeader: React.FC = () => (
+    const ProfileHeader = useCallback(() => (
         <View className="bg-gray-800 rounded-xl p-6 mb-6">
             <View className="items-center mb-6">
                 {/* Avatar */}
@@ -263,7 +330,7 @@ const ProfileScreen: React.FC = () => {
             <View className="space-y-3">
                 <TouchableOpacity
                     className="bg-primary-500 rounded-xl py-3 items-center"
-                    onPress={() => setShowEditModal(true)}
+                    onPress={handleModalOpen}
                 >
                     <Text className="text-white font-semibold text-base">✏️ Edit Profile</Text>
                 </TouchableOpacity>
@@ -272,7 +339,7 @@ const ProfileScreen: React.FC = () => {
                     className={`rounded-xl py-3 items-center ${
                         loggingOut ? 'bg-gray-600' : 'bg-red-500'
                     }`}
-                    onPress={handleLogout}  // No need for arrow function anymore
+                    onPress={handleLogout}
                     disabled={loggingOut}
                     style={{ opacity: loggingOut ? 0.6 : 1 }}
                 >
@@ -282,9 +349,9 @@ const ProfileScreen: React.FC = () => {
                 </TouchableOpacity>
             </View>
         </View>
-    );
+    ), [userProfile, user, handleModalOpen, handleLogout, loggingOut]);
 
-    const FavoritesSection: React.FC = () => (
+    const FavoritesSection = useCallback(() => (
         <View className="flex-1">
             <View className="flex-row items-center justify-between mb-4">
                 <Text className="text-white text-xl font-bold">My Favorites</Text>
@@ -330,66 +397,87 @@ const ProfileScreen: React.FC = () => {
                 </View>
             )}
         </View>
+    ), [favorites, loading, refreshing, onRefresh, renderFavoriteItem]);
+
+    return (
+        <SafeAreaView className="flex-1 bg-gray-900">
+            <ScrollView
+                className="flex-1 px-6 pt-6"
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor="#0ea5e9"
+                        colors={['#0ea5e9']}
+                    />
+                }
+            >
+                <ProfileHeader />
+                <FavoritesSection />
+            </ScrollView>
+
+            {/* Render modal conditionally to prevent unnecessary re-renders */}
+            {showEditModal && (
+                <Modal
+                    visible={true}
+                    transparent
+                    animationType="slide"
+                    onRequestClose={handleModalClose}
+                >
+                    <View className="flex-1 bg-black/50 justify-end">
+                        <View className="bg-gray-900 rounded-t-3xl p-6">
+                            <View className="flex-row items-center justify-between mb-6">
+                                <Text className="text-white text-xl font-bold">Edit Profile</Text>
+                                <TouchableOpacity
+                                    onPress={handleModalClose}
+                                    className="bg-gray-800 rounded-full p-2"
+                                >
+                                    <Text className="text-white text-lg">✕</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            <View className="mb-6">
+                                <Text className="text-white text-base font-medium mb-2">Display Name</Text>
+                                <TextInput
+                                    value={newDisplayName}
+                                    onChangeText={setNewDisplayName}
+                                    placeholder="Enter your display name"
+                                    placeholderTextColor="#9ca3af"
+                                    className="bg-gray-800 text-white px-4 py-3 rounded-xl text-base"
+                                    maxLength={50}
+                                />
+                            </View>
+
+                            <View className="flex-row space-x-3">
+                                <TouchableOpacity
+                                    className="flex-1 bg-gray-700 rounded-xl py-3 items-center"
+                                    onPress={handleModalClose}
+                                >
+                                    <Text className="text-white font-medium">Cancel</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    className={`flex-1 rounded-xl py-3 items-center ${
+                                        updating ? 'bg-gray-600' : 'bg-primary-500'
+                                    }`}
+                                    onPress={handleUpdateProfile}
+                                    disabled={updating}
+                                >
+                                    <Text className="text-white font-medium">
+                                        {updating ? 'Updating...' : 'Save Changes'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+            )}
+        </SafeAreaView>
     );
 
-    const EditProfileModal: React.FC = () => (
-        <Modal
-            visible={showEditModal}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setShowEditModal(false)}
-        >
-            <View className="flex-1 bg-black/50 justify-end">
-                <View className="bg-gray-900 rounded-t-3xl p-6">
-                    <View className="flex-row items-center justify-between mb-6">
-                        <Text className="text-white text-xl font-bold">Edit Profile</Text>
-                        <TouchableOpacity
-                            onPress={() => setShowEditModal(false)}
-                            className="bg-gray-800 rounded-full p-2"
-                        >
-                            <Text className="text-white text-lg">✕</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <View className="mb-6">
-                        <Text className="text-white text-base font-medium mb-2">Display Name</Text>
-                        <TextInput
-                            value={newDisplayName}
-                            onChangeText={setNewDisplayName}
-                            placeholder="Enter your display name"
-                            placeholderTextColor="#9ca3af"
-                            className="bg-gray-800 text-white px-4 py-3 rounded-xl text-base"
-                            maxLength={50}
-                        />
-                    </View>
-
-                    <View className="flex-row space-x-3">
-                        <TouchableOpacity
-                            className="flex-1 bg-gray-700 rounded-xl py-3 items-center"
-                            onPress={() => setShowEditModal(false)}
-                        >
-                            <Text className="text-white font-medium">Cancel</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            className={`flex-1 rounded-xl py-3 items-center ${
-                                updating ? 'bg-gray-600' : 'bg-primary-500'
-                            }`}
-                            onPress={handleUpdateProfile}
-                            disabled={updating}
-                        >
-                            <Text className="text-white font-medium">
-                                {updating ? 'Updating...' : 'Save Changes'}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </View>
-        </Modal>
-    );
-
-    // Show loading state while auth is initializing
-    if (loading) {
+    // Show loading state while auth is initializing OR component is not mounted
+    if (authLoading || !mounted) {
         return (
             <SafeAreaView className="flex-1 bg-gray-900">
                 <View className="flex-1 justify-center items-center">
@@ -420,27 +508,7 @@ const ProfileScreen: React.FC = () => {
         );
     }
 
-    return (
-        <SafeAreaView className="flex-1 bg-gray-900">
-            <ScrollView
-                className="flex-1 px-6 pt-6"
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor="#0ea5e9"
-                        colors={['#0ea5e9']}
-                    />
-                }
-            >
-                <ProfileHeader />
-                <FavoritesSection />
-            </ScrollView>
 
-            <EditProfileModal />
-        </SafeAreaView>
-    );
 };
 
 export default ProfileScreen;
